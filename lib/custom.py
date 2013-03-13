@@ -1,4 +1,5 @@
 from lib import util
+from sys import platform as os_type
 
 import commands
 import os
@@ -96,8 +97,15 @@ def deploy_r(app, setup_dir):
                 ['klaR','http://cran.r-project.org'],
                 ['RColorBrewer','http://cran.r-project.org']]
     for pkg in packages:
-        r_exe = os.path.join(app.deploy_dir, 'bin/R')
+        # OSX's framework structure group all of R's resources in a single place
+        if os_type == 'darwin':
+            r_exe = os.path.join(app.deploy_dir, 'R.framework/Resources/bin/R')
+        else:
+            r_exe = os.path.join(app.deploy_dir, 'bin/R')
+
         makeStr  = "echo \"install.packages('%s',repos='%s')\" | %s --slave --vanilla" % (pkg[0],pkg[1],r_exe)
+        app.log.debug('Custom R command: %s' % makeStr)
+
         (makeStatus, makeOut) = commands.getstatusoutput(makeStr)
         if makeStatus == 0:
             app.log.debug('deploy r %s packages install succeeded' % pkg[0]) 
@@ -228,6 +236,9 @@ def deploy_dotur(app, setup_dir):
     return util.copytree(setup_dir, app.deploy_dir)
 
 def _generate_qiime_config(python_path, deploy_dir, all_apps_to_deploy, log):
+    qiime_config_path = os.path.join(deploy_dir, 'qiime_config')
+    log.info('Generating new %s file' % qiime_config_path)
+
     qiime_path = None
     blast_path = None
     blast_data_path = None
@@ -238,16 +249,11 @@ def _generate_qiime_config(python_path, deploy_dir, all_apps_to_deploy, log):
         if app.name == 'blast':
             blast_path = os.path.join(app.deploy_dir, 'bin/blastall')
             blast_data_path = os.path.join(app.deploy_dir, 'data')
-
-    if not qiime_path:
-        # No qiime target so skip.
-        return 0
-
-    qiime_config_path = os.path.join(deploy_dir, 'qiime_config')
-    log.info('Generating new %s file' % qiime_config_path)
-
-    if not (blast_path and blast_data_path):
-        log.error('Missing necessary paths for %s file.' % qiime_config_path)
+      
+    if not (qiime_path and \
+            blast_path and \
+            blast_data_path):
+        log.error('Missing necessary path for %s file.' % qiime_config_path)
         log.error('Skipping generation of %s' % qiime_config_path)
         return 1
 
